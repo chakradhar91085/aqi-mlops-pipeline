@@ -99,8 +99,8 @@ ml-ops/
 ### 1. Clone & Configure
 
 ```bash
-git clone <https://github.com/justaguy1337/mlops.git>
-cd mlops
+git clone https://github.com/chakradhar91085/aqi-mlops-pipeline.git
+cd aqi-mlops-pipeline
 
 # Copy environment template and edit your values
 cp .env.example .env
