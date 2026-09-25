@@ -1,0 +1,4 @@
+[    1249ms] [LOG] Gather usage stats:  false @ http://localhost:8501/static/js/main.d55f6a3c.js:1
+[ 1183879ms] [ERROR] Failed to load resource: net::ERR_NETWORK_IO_SUSPENDED @ http://localhost:8501/_stcore/health:0
+[ 1183880ms] [ERROR] Failed to load resource: net::ERR_NETWORK_IO_SUSPENDED @ http://localhost:8501/_stcore/host-config:0
+[ 1184962ms] [LOG] Gather usage stats:  false @ http://localhost:8501/static/js/main.d55f6a3c.js:1

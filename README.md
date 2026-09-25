@@ -190,7 +190,7 @@ docker exec -it aqi_postgres psql -U aqi_user -d aqi_db
 
 | Source | URL | Usage | API Key |
 |---|---|---|---|
-| **OpenAQ v3** | https://api.openaq.org/v3/ | PM2.5, PM10, NO2, O3, CO, SO2 | Optional (free tier works) |
+| **OpenAQ v3** | https://api.openaq.org/v3/ | PM2.5, PM10, NO2, O3, CO, SO2 | **Required** — register free at https://explore.openaq.org/ |
 | **Open-Meteo** | https://archive-api.open-meteo.com/v1/archive | Weather variables | None required |
 
 Both sources are **free, publicly accessible, and legally usable** per the project dataset rule.
@@ -234,7 +234,7 @@ See `.env.example` for all variables. Key ones:
 | `POSTGRES_USER` | DB username |
 | `POSTGRES_PASSWORD` | DB password (**change in production**) |
 | `AIRFLOW_FERNET_KEY` | Airflow encryption key (generate with Python) |
-| `OPENAQ_API_KEY` | Optional — increases rate limits |
+| `OPENAQ_API_KEY` | **Required** — get a free key at https://explore.openaq.org/ |
 | `TARGET_CITIES` | Comma-separated city list |
 | `BACKFILL_DAYS` | Days of historical data to collect on first run |
 | `MAX_REJECTION_RATE` | Pipeline fails if rejection % exceeds this |

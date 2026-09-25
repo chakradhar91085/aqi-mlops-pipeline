@@ -89,8 +89,14 @@ def aqi_trend_line(df: pd.DataFrame, cities: list[str]) -> go.Figure:
             ),
         ))
 
+    # Zoom to the data instead of always showing the full 0-500 AQI scale —
+    # a city sitting in "Moderate" all month shouldn't render as a flat line
+    # squeezed under empty Unhealthy/Hazardous bands.
+    max_aqi = df["aqi"].max() if not df.empty else 100
+    y_top = max(100, max_aqi * 1.15)
+
     _apply_base(fig, "Daily AQI Trend by City")
-    fig.update_yaxes(title="AQI", range=[0, 520])
+    fig.update_yaxes(title="AQI", range=[0, y_top])
     fig.update_xaxes(title="Date")
     fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
@@ -257,11 +263,6 @@ def weather_scatter(df: pd.DataFrame, x_col: str, x_label: str) -> go.Figure:
     df = df.dropna(subset=[x_col, "aqi"])
     colors = df["aqi_category"].map(AQI_COLORS).fillna("#888")
 
-    # OLS trend line
-    z = np.polyfit(df[x_col], df["aqi"], 1)
-    p = np.poly1d(z)
-    x_range = np.linspace(df[x_col].min(), df[x_col].max(), 100)
-
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=df[x_col], y=df["aqi"],
@@ -275,12 +276,19 @@ def weather_scatter(df: pd.DataFrame, x_col: str, x_label: str) -> go.Figure:
         ),
         name="Daily observation",
     ))
-    fig.add_trace(go.Scatter(
-        x=x_range, y=p(x_range),
-        mode="lines",
-        line=dict(color="#f72585", dash="dash", width=2),
-        name="Trend",
-    ))
+
+    # OLS trend line — needs >=2 points with actual variance in x, else polyfit's
+    # SVD has nothing to fit and raises LinAlgError.
+    if len(df) >= 2 and df[x_col].nunique() > 1:
+        z = np.polyfit(df[x_col], df["aqi"], 1)
+        p = np.poly1d(z)
+        x_range = np.linspace(df[x_col].min(), df[x_col].max(), 100)
+        fig.add_trace(go.Scatter(
+            x=x_range, y=p(x_range),
+            mode="lines",
+            line=dict(color="#f72585", dash="dash", width=2),
+            name="Trend",
+        ))
 
     _apply_base(fig, f"AQI vs {x_label}")
     fig.update_xaxes(title=x_label)

@@ -1,0 +1,121 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e7]:
+      - button "Deploy" [ref=e9] [cursor=pointer]
+      - button [ref=e13] [cursor=pointer]
+  - generic [ref=e4]:
+    - generic [ref=e18]:
+      - list [ref=e21]:
+        - listitem [ref=e22]:
+          - link "Home" [ref=e24] [cursor=pointer]:
+            - /url: http://localhost:8501/Home
+        - listitem [ref=e26]:
+          - link "AQI Trend" [ref=e28] [cursor=pointer]:
+            - /url: http://localhost:8501/AQI_Trend
+        - listitem [ref=e30]:
+          - link "Pollutant Contribution" [ref=e32] [cursor=pointer]:
+            - /url: http://localhost:8501/Pollutant_Contribution
+        - listitem [ref=e34]:
+          - link "City Comparison" [ref=e36] [cursor=pointer]:
+            - /url: http://localhost:8501/City_Comparison
+        - listitem [ref=e38]:
+          - link "Hourly Monthly Pattern" [ref=e40] [cursor=pointer]:
+            - /url: http://localhost:8501/Hourly_Monthly_Pattern
+        - listitem [ref=e42]:
+          - link "Weather Impact" [ref=e44] [cursor=pointer]:
+            - /url: http://localhost:8501/Weather_Impact
+      - generic [ref=e50]:
+        - generic [ref=e54]:
+          - generic [ref=e55]: 🌬️
+          - generic [ref=e56]: AQI Analytics
+          - generic [ref=e57]: Data Engineering & MLOps
+        - separator [ref=e61]
+        - paragraph [ref=e65]:
+          - strong [ref=e66]: 📍 Data Sources
+        - list [ref=e70]:
+          - listitem [ref=e71]:
+            - text: 🌍
+            - link "OpenAQ v3 API" [ref=e72] [cursor=pointer]:
+              - /url: https://api.openaq.org/v3/
+          - listitem [ref=e73]:
+            - text: 🌤️
+            - link "Open-Meteo API" [ref=e74] [cursor=pointer]:
+              - /url: https://open-meteo.com/
+          - listitem [ref=e75]: "📅 Cities: Delhi · Mumbai · Bengaluru · Chennai · Kolkata"
+        - separator [ref=e79]
+        - paragraph [ref=e83]:
+          - strong [ref=e84]: ⚙️ Pipeline Status
+        - alert [ref=e87]:
+          - paragraph [ref=e92]: ✅ Database connected
+        - paragraph [ref=e96]: "Data: 2026-08-31 → 2026-09-25"
+        - separator [ref=e100]
+        - generic [ref=e101]: AQI Data Pipeline v1.0 Part 1 — Data Engineering
+    - generic [ref=e109]:
+      - generic [ref=e110]: 🌬️ Air Quality Index Analytics
+      - paragraph [ref=e117]:
+        - strong [ref=e118]: Real-time and historical AQI monitoring across major Indian cities
+        - text: — powered by OpenAQ and Open-Meteo data through an automated ETL pipeline.
+      - separator [ref=e122]
+      - heading "📊 Latest AQI by City" [level=3] [ref=e127]
+      - generic [ref=e129]:
+        - generic [ref=e137]:
+          - generic [ref=e138]: Bengaluru
+          - generic [ref=e139]: "77"
+          - generic [ref=e140]: Moderate
+          - generic [ref=e141]: "Dominant: PM25"
+          - generic [ref=e142]: 2026-09-25
+        - generic [ref=e150]:
+          - generic [ref=e151]: Chennai
+          - generic [ref=e152]: "79"
+          - generic [ref=e153]: Moderate
+          - generic [ref=e154]: "Dominant: PM25"
+          - generic [ref=e155]: 2026-09-25
+        - generic [ref=e163]:
+          - generic [ref=e164]: Delhi
+          - generic [ref=e165]: "38"
+          - generic [ref=e166]: Good
+          - generic [ref=e167]: "Dominant: PM25"
+          - generic [ref=e168]: 2026-09-25
+        - generic [ref=e176]:
+          - generic [ref=e177]: Kolkata
+          - generic [ref=e178]: "69"
+          - generic [ref=e179]: Moderate
+          - generic [ref=e180]: "Dominant: PM25"
+          - generic [ref=e181]: 2026-09-21
+        - generic [ref=e189]:
+          - generic [ref=e190]: Mumbai
+          - generic [ref=e191]: "105"
+          - generic [ref=e192]: Unhealthy for Sensitive Groups
+          - generic [ref=e193]: "Dominant: PM25"
+          - generic [ref=e194]: 2026-09-22
+      - separator [ref=e198]
+      - heading "🗺️ Dashboard Pages" [level=3] [ref=e203]
+      - generic [ref=e205]:
+        - generic [ref=e209]:
+          - generic [ref=e213]:
+            - generic [ref=e214]: 📈
+            - generic [ref=e215]: AQI Trend
+            - generic [ref=e216]: Daily AQI over time per station and city
+          - generic [ref=e220]:
+            - generic [ref=e221]: ⏰
+            - generic [ref=e222]: Hourly & Monthly Patterns
+            - generic [ref=e223]: Time-of-day and seasonal AQI patterns
+        - generic [ref=e227]:
+          - generic [ref=e231]:
+            - generic [ref=e232]: 🧪
+            - generic [ref=e233]: Pollutant Contribution
+            - generic [ref=e234]: PM2.5, PM10, NO2, O3 breakdown
+          - generic [ref=e238]:
+            - generic [ref=e239]: 🌡️
+            - generic [ref=e240]: Weather Impact
+            - generic [ref=e241]: How temperature, humidity & wind affect AQI
+        - generic [ref=e249]:
+          - generic [ref=e250]: 🏙️
+          - generic [ref=e251]: City Comparison
+          - generic [ref=e252]: Side-by-side heatmap across 5 cities
+      - separator [ref=e256]
+      - heading "🏗️ Pipeline Architecture" [level=3] [ref=e261]
+      - generic [ref=e264]:
+        - code [ref=e267]: OpenAQ API ──┐ ├──▶ Python Collectors ──▶ Raw JSON Landing Zone Open-Meteo ──┘ │ ▼ Apache Airflow ETL │ ┌──────────┼──────────┐ ▼ ▼ ▼ staging cleaned gold (normalize) (validate) (aggregate) │ ▼ PostgreSQL 4-layer │ ▼ Streamlit Dashboard ← YOU ARE HERE
+        - generic:
+          - button "Copy to clipboard"

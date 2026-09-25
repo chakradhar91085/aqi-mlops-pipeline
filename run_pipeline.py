@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import sys
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 # Make project root importable
@@ -178,6 +178,14 @@ def run(extraction_date: date) -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        # Backfill mode: `python run_pipeline.py 14` runs the last 14 days
+        # (oldest first), so trend/rolling-average charts have real history.
+        n_days = int(sys.argv[1])
+        for offset in range(n_days - 1, -1, -1):
+            run(date.today() - timedelta(days=offset))
+        sys.exit(0)
+
     if len(sys.argv) > 1:
         try:
             target_date = datetime.strptime(sys.argv[1], "%Y-%m-%d").date()

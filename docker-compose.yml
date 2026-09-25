@@ -19,6 +19,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: Asia/Kolkata
     AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
     POSTGRES_HOST: postgres
     # Make project modules importable inside Airflow containers

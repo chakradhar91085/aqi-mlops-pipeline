@@ -9,6 +9,7 @@ for upsert operations across all pipeline layers.
 from __future__ import annotations
 
 import os
+import math
 import logging
 from contextlib import contextmanager
 from typing import Generator
@@ -172,7 +173,15 @@ def upsert_dataframe(
         DO UPDATE SET {update_set}
     """
 
+    # pandas keeps NaN (not None) through df.where()/fillna() for numeric
+    # columns, and NaN sent to an integer/numeric SQL column errors out —
+    # scrub per-record instead.
     records = df.to_dict(orient="records")
+    for record in records:
+        for key, value in record.items():
+            if isinstance(value, float) and math.isnan(value):
+                record[key] = None
+
     with engine.begin() as conn:
         conn.execute(text(sql), records)
 
