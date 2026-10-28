@@ -49,12 +49,15 @@ flowchart TD
         G5["Page 5: Weather Impact\nScatter plots + correlation matrix"]
     end
 
-    subgraph Part2["🤖 Part 2 (Future — MLOps)"]
-        H1["Feature Pipeline\nLag features, rolling windows"]
-        H2["Model Training + MLflow\nRegression & Classification\nExperiment tracking"]
-        H3["Model Registry\nVersioning, best model selection"]
-        H4["FastAPI + Docker\nReal-time prediction service"]
-        H5["Monitoring\nDrift detection, performance, latency"]
+    subgraph Part2["🤖 Part 2 — MLOps (implemented)"]
+        H1["ml/features.py\nLag, rolling, pollutant, weather,\ncalendar features (shared by train/API/monitoring)"]
+        H2["ml/train.py + MLflow :5000\nBaselines, 3 regressors (+delta variants),\n3 classifiers; chronological split"]
+        H3["MLflow Model Registry\naqi_next_day versions\n@champion alias + promotion gate"]
+        H4["FastAPI + Docker :8000\n/predict /health /reload"]
+        H5["aqi_ml_monitoring DAG (05:00 UTC)\npredict → score → PSI/KS drift, errors,\nlatency → retrain check"]
+        H6["aqi_ml_training DAG\nweekly or triggered:\ntrain → promote → reload API"]
+        H7["ml.* tables\npredictions, api_requests,\nmonitoring_metrics"]
+        G6["Pages 6-7: AQI Forecast,\nModel Monitoring"]
     end
 
     A1 --> B1
@@ -85,12 +88,17 @@ flowchart TD
     F4 --> G4
     F4 --> G5
 
-    F4 -.->|Part 2| H1
+    F4 --> H1
     H1 --> H2
     H2 --> H3
     H3 --> H4
     H4 --> H5
-    H4 -.-> G1
+    H5 --> H7
+    H5 -->|retrain criteria met| H6
+    H6 --> H2
+    H6 -->|POST /reload| H4
+    H7 --> G6
+    H4 --> G6
 
     style Sources fill:#1a1a2e,stroke:#4cc9f0,color:#e6edf3
     style Ingestion fill:#16213e,stroke:#f72585,color:#e6edf3
@@ -99,7 +107,7 @@ flowchart TD
     style ETL fill:#16213e,stroke:#4361ee,color:#e6edf3
     style DB fill:#0f3460,stroke:#4cc9f0,color:#e6edf3
     style Dashboard fill:#1a1a2e,stroke:#00e400,color:#e6edf3
-    style Part2 fill:#16213e,stroke:#555,color:#888,stroke-dasharray: 5 5
+    style Part2 fill:#16213e,stroke:#f4a261,color:#e6edf3
 ```
 
 ---
@@ -114,7 +122,7 @@ flowchart TD
 | **4. Transformation** | ETL modules + Apache Airflow | Quality checks, AQI calculation, aggregation |
 | **5. Storage** | PostgreSQL `cleaned.*` + `gold.*` | Validated, analysis-ready tables |
 | **6. Analytics** | Streamlit + Plotly | Interactive 5-page dashboard |
-| **7. MLOps (Part 2)** | MLflow, FastAPI, Docker | Model training, serving, and monitoring |
+| **7. MLOps (Part 2)** | scikit-learn, MLflow, FastAPI, Docker, Airflow | Next-day AQI model: training, registry, serving, drift/error monitoring, retraining (see [model_lifecycle.md](model_lifecycle.md)) |
 
 ---
 

@@ -93,11 +93,8 @@ for col, city in zip(kpi_cols, selected_cities):
     max_aqi = city_df["aqi"].max()
     last_aqi = city_df.sort_values("date_ist")["aqi"].iloc[-1]
     with col:
-        st.metric(
-            label=f"🏙️ {city}",
-            value=f"{last_aqi:.0f}",
-            delta=f"Avg: {avg_aqi:.0f} | Max: {max_aqi:.0f}",
-        )
+        st.metric(label=f"🏙️ {city} (latest)", value=f"{last_aqi:.0f}")
+        st.caption(f"Avg {avg_aqi:.0f} · Max {max_aqi:.0f}")
 
 st.markdown("---")
 

@@ -207,6 +207,17 @@ try:
     kpis = get_latest_kpis()
 
     if not kpis.empty:
+        from datetime import date as _date
+        import pandas as _pd
+
+        latest_day = _pd.to_datetime(kpis["date_ist"]).max().date()
+        age_days = (_date.today() - latest_day).days
+        if age_days > 2:
+            st.warning(
+                f"⚠️ Latest data is from **{latest_day}** ({age_days} days old). "
+                "Check the `aqi_ingestion` DAG in Airflow (http://localhost:8081) — a rejected OpenAQ API key "
+                "or a stopped scheduler are the usual causes."
+            )
         st.markdown("### 📊 Latest AQI by City")
         cols = st.columns(len(kpis))
         for col, (_, row) in zip(cols, kpis.iterrows()):
@@ -231,9 +242,10 @@ try:
     else:
         st.info("📭 No AQI data available yet. Run the ingestion pipeline first.")
 
-except Exception:
+except Exception as exc:
     st.markdown("### 📊 Latest AQI by City")
-    st.info("⚠️ Connect to the database to see live AQI data. Navigate to the pages using the sidebar.")
+    st.info("⚠️ Could not load AQI data. Is the database up? You can still use the pages in the sidebar.")
+    st.caption(f"{type(exc).__name__}: {exc}")
 
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
@@ -247,10 +259,12 @@ pages = [
     ("🏙️", "City Comparison", "pages/03_City_Comparison.py", "Side-by-side heatmap across 5 cities"),
     ("⏰", "Hourly & Monthly Patterns", "pages/04_Hourly_Monthly_Pattern.py", "Time-of-day and seasonal AQI patterns"),
     ("🌡️", "Weather Impact", "pages/05_Weather_Impact.py", "How temperature, humidity & wind affect AQI"),
+    ("🔮", "AQI Forecast", "pages/06_AQI_Forecast.py", "Next-day AQI predicted by the MLflow-registered model"),
+    ("🩺", "Model Monitoring", "pages/07_Model_Monitoring.py", "Forecast error, feature drift, API health"),
 ]
 
 cols = st.columns(3)
-for i, (icon, name, _, desc) in enumerate(pages):
+for i, (icon, name, path, desc) in enumerate(pages):
     with cols[i % 3]:
         st.markdown(f"""
         <div class="aqi-card">
@@ -259,6 +273,7 @@ for i, (icon, name, _, desc) in enumerate(pages):
             <div style="font-size:0.8rem; color:#8b949e;">{desc}</div>
         </div>
         """, unsafe_allow_html=True)
+        st.page_link(path, label=f"Open {name}", icon=icon, use_container_width=True)
 
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 

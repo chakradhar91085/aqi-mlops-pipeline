@@ -19,7 +19,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +105,14 @@ class OpenAQCollector:
     def _get(self, endpoint: str, params: dict[str, Any]) -> dict:
         url = f"{OPENAQ_BASE_URL}/{endpoint}"
         response = self.session.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        if response.status_code in (401, 403):
+            # Not a RequestException on purpose: it must not be retried or swallowed into "0 records",
+            # which would let the DAG report success with no data.
+            raise PermissionError(
+                f"OpenAQ rejected the API key (HTTP {response.status_code}). "
+                "Create a new key at https://explore.openaq.org and set OPENAQ_API_KEY in .env, "
+                "then restart the Airflow containers."
+            )
         response.raise_for_status()
         return response.json()
 
@@ -136,6 +144,23 @@ class OpenAQCollector:
         except requests.RequestException as exc:
             logger.error("Failed to fetch locations for %s: %s", city, exc)
             return []
+
+    def select_stations(self, locations: list[dict]) -> list[dict]:
+        """
+        Stable station set per city: still reporting, >= 5 target sensors, longest history first.
+        Recency-sorted picks drift to brand-new low-cost sensors with no history.
+        """
+        def _utc(loc: dict, key: str, default: str) -> str:
+            dt = loc.get(key)
+            return (dt.get("utc", "") if isinstance(dt, dict) else "")[:10] or default
+
+        cutoff = (date.today() - timedelta(days=14)).isoformat()
+        candidates = [
+            l for l in locations
+            if _utc(l, "datetimeLast", "") >= cutoff and len(self._extract_target_sensors(l)) >= 5
+        ]
+        candidates.sort(key=lambda l: (_utc(l, "datetimeFirst", "9999-12-31"), l.get("id", 0)))
+        return (candidates or locations)[:MAX_LOCATIONS_PER_CITY]
 
     # ── Measurement fetch ─────────────────────────────────────────────────────
 
@@ -200,21 +225,7 @@ class OpenAQCollector:
             logger.info("Collecting OpenAQ data for %s on %s", city, date_str)
             locations = self.get_locations(city)
 
-            # Filter to active locations reporting on or after date_str, then cap
-            active_locations = []
-            for loc in locations:
-                dt = loc.get("datetimeLast")
-                last_utc = dt.get("utc", "") if isinstance(dt, dict) else ""
-                if last_utc and last_utc[:10] < date_str:
-                    continue  # stopped reporting before extraction date
-                active_locations.append(loc)
-                if len(active_locations) >= MAX_LOCATIONS_PER_CITY:
-                    break
-
-            if not active_locations:
-                active_locations = locations[:MAX_LOCATIONS_PER_CITY]
-
-            for loc in active_locations:
+            for loc in self.select_stations(locations):
                 loc_id = loc.get("id")
                 if not loc_id:
                     continue

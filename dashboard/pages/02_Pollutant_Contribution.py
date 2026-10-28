@@ -57,6 +57,7 @@ with st.sidebar:
     )
 
 if len(date_range) != 2:
+    st.info("Select both a start date and an end date to continue.")
     st.stop()
 start_date, end_date = date_range
 
@@ -71,11 +72,11 @@ if df_pollutant.empty:
 
 # ── Date selector for pie chart ───────────────────────────────────────────────
 
-available_dates = sorted(df_pollutant["date_ist"].astype(str).unique(), reverse=True)
+available_dates = sorted(df_pollutant["date_ist"].astype(str).unique())
 selected_date = st.select_slider(
     "Select a Date for Detailed Breakdown",
     options=available_dates,
-    value=available_dates[0] if available_dates else None,
+    value=available_dates[-1] if available_dates else None,
 )
 
 # ── Row 1: Pie + Concentration bar ───────────────────────────────────────────

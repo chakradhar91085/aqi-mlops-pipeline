@@ -219,6 +219,37 @@ def get_weather_aqi(city: str, start_date: date, end_date: date) -> pd.DataFrame
 # ── KPI summary ───────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
+def get_predictions(city: str) -> pd.DataFrame:
+    """Part 2: backtest + live next-day predictions for a city (actuals filled in once known)."""
+    sql = """
+        SELECT forecast_date, predicted_aqi, predicted_category, actual_aqi, abs_error,
+               model_version, source
+        FROM ml.predictions
+        WHERE city = :city
+        ORDER BY forecast_date
+    """
+    try:
+        return _read(sql, {"city": city})
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def get_monitoring_metrics(days: int = 60) -> pd.DataFrame:
+    """Part 2: rows written daily by the aqi_ml_monitoring DAG."""
+    sql = """
+        SELECT run_date, metric, scope, value, threshold, breached
+        FROM ml.monitoring_metrics
+        WHERE run_date >= CURRENT_DATE - CAST(:days AS integer)
+        ORDER BY run_date
+    """
+    try:
+        return _read(sql, {"days": days})
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
 def get_latest_kpis() -> pd.DataFrame:
     """Latest AQI per city for the dashboard header KPIs."""
     sql = """

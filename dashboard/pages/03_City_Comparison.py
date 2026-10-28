@@ -54,6 +54,7 @@ with st.sidebar:
     )
 
 if len(date_range) != 2:
+    st.info("Select both a start date and an end date to continue.")
     st.stop()
 start_date, end_date = date_range
 
@@ -85,10 +86,9 @@ if not df_stats.empty:
             st.metric(
                 label=f"#{i+1} {row['city']}",
                 value=f"{row['avg_aqi']}",
-                delta=f"Max: {row['max_aqi']} | Min: {row['min_aqi']}",
-                delta_color="inverse",
                 help=f"Most common category: {icon} {row.get('dominant_category', 'Unknown')}",
             )
+            st.caption(f"Max {row['max_aqi']} · Min {row['min_aqi']}")
 
 st.markdown("---")
 

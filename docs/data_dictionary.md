@@ -252,6 +252,87 @@ Station dimension/lookup table.
 | `last_seen` | DATE | Date of most recent observation |
 | `is_active` | BOOLEAN | Whether station is currently reporting |
 
+### Station selection rule
+
+Each city is monitored through a fixed set of up to **5 stations**, chosen by `OpenAQCollector.select_stations`:
+still reporting (last data within 14 days), at least 5 target sensors, longest history first (earliest
+`datetimeFirst`, ties by station id). Live ingestion and the historical backfill use the same rule, so the
+daily city AQI is computed from one consistent station set (25 stations across the 5 cities).
+
+---
+
+## Schema: `ml` — Part 2 (MLOps)
+
+Created by `db/ml_schema.sql`.
+
+### `ml.predictions`
+
+One row per (city, forecast day, model version, source). Actuals are back-filled by the daily monitoring DAG.
+
+| Column | Type | Description | Example |
+|---|---|---|---|
+| `id` | BIGSERIAL PK | Row ID | 1 |
+| `city` | VARCHAR(100) | City | `Delhi` |
+| `as_of` | DATE | Last observed day used to build features | `2026-10-02` |
+| `forecast_date` | DATE | Day being predicted (`as_of` + 1) | `2026-10-03` |
+| `predicted_aqi` | DOUBLE PRECISION | Predicted next-day AQI | 161.6 |
+| `predicted_category` | VARCHAR(50) | Category of the prediction | `Unhealthy` |
+| `actual_aqi` | INTEGER | Observed AQI once the day is in `gold.daily_city_aqi` (NULL until then) | 158 |
+| `actual_category` | VARCHAR(50) | Category of the actual AQI | `Unhealthy` |
+| `abs_error` | DOUBLE PRECISION | `abs(predicted_aqi - actual_aqi)` | 3.6 |
+| `model_version` | VARCHAR(20) | Registry version that produced it | `3` |
+| `source` | VARCHAR(10) | `live` (real forecast) or `backtest` (held-out test period, seeded by training) | `live` |
+| `predicted_at` | TIMESTAMPTZ | When the row was written | |
+
+Unique key: `(city, forecast_date, model_version, source)`.
+
+### `ml.api_requests`
+
+Request log written by the FastAPI middleware (`/predict` and `/reload`).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | BIGSERIAL PK | Row ID |
+| `ts` | TIMESTAMPTZ | Request time |
+| `endpoint` | VARCHAR(50) | `/predict` or `/reload` |
+| `city` | VARCHAR(100) | City query parameter (NULL for `/reload`) |
+| `status_code` | INTEGER | HTTP status returned |
+| `latency_ms` | DOUBLE PRECISION | Server-side latency |
+| `error` | TEXT | Exception text if the handler raised |
+
+### `ml.monitoring_metrics`
+
+Written daily by the `aqi_ml_monitoring` DAG. Unique key: `(run_date, metric, scope)`.
+
+| `metric` | `scope` | Meaning | Alert rule |
+|---|---|---|---|
+| `psi` | feature name | Population Stability Index, last 14 days vs the champion's training data from the same time of year | above `max(0.25, 4 × expected sampling noise)` |
+| `ks_pvalue` | feature name | Kolmogorov-Smirnov p-value for the same comparison | < 0.05 |
+| `missing_pct` | `all` | % of NaN feature values in today's inference rows | > 20 |
+| `stale_cities` | `all` | Cities with no gold row for the latest day | > 0 |
+| `live_mae_14d` | city or `all` | Mean absolute error of live predictions, last 14 days | > 1.3 × champion test MAE (needs ≥ 10 scored predictions) |
+| `latency_p95_ms` | `all` | API p95 latency, last 24 h | > 2000 |
+| `error_rate` | `all` | Share of API requests with 5xx or an exception, last 24 h | > 0.05 |
+
+Other columns: `value`, `threshold` (the alert level used), `breached` (BOOLEAN).
+
+### Model features (`ml/features.py`)
+
+Built per (city, date) from `gold.daily_city_aqi` joined to `gold.weather_aqi_daily`. Every feature uses data up to
+and including day *t*; the targets are day *t+1*. Each city is reindexed to a complete daily calendar first, so a
+missing day produces NaN rather than a shifted value.
+
+| Group | Features |
+|---|---|
+| Current AQI | `aqi` |
+| AQI lags | `aqi_lag1`, `aqi_lag2`, `aqi_lag3`, `aqi_lag7` |
+| Rolling AQI | `aqi_roll3_mean`, `aqi_roll7_mean`, `aqi_roll7_std`, `aqi_roll14_mean` |
+| Pollutants (daily avg, µg/m³) | `pm25_avg`, `pm10_avg`, `no2_avg`, `o3_avg`, `co_avg`, `so2_avg`, plus `pm25_lag1` |
+| Weather (daily) | `temp_avg`, `humidity_avg`, `wind_speed_avg`, `precipitation_sum` |
+| Calendar | `dow`, `month`, `is_weekend` |
+| Categorical | `city` (one-hot inside the model pipeline) |
+| **Targets** | `y_aqi` = next-day AQI (regression); `y_cat` = its AQI category (classification, `Hazardous` merged into `Very Unhealthy`) |
+
 ---
 
 ## AQI Calculation Method

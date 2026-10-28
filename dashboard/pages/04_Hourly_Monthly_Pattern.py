@@ -56,6 +56,7 @@ with st.sidebar:
     )
 
 if len(date_range) != 2:
+    st.info("Select both a start date and an end date to continue.")
     st.stop()
 start_date, end_date = date_range
 

@@ -37,56 +37,8 @@ logging.basicConfig(
 logger = logging.getLogger("run_pipeline")
 
 
-def run(extraction_date: date) -> None:
-    print(f"\n{'='*60}")
-    print(f"  AQI Pipeline — {extraction_date}")
-    print(f"{'='*60}\n")
-
-    # ── Step 0: Load env ─────────────────────────────────────────
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    # ── Step 1: Test DB connection ───────────────────────────────
-    print("Step 1 / 6 — Testing database connection…")
-    from db.db_utils import test_connection
-    if not test_connection():
-        print("\n❌ ERROR: Cannot connect to PostgreSQL!")
-        print("   Make sure PostgreSQL is running and .env is configured correctly.")
-        print("   See README.md → Step 2 for setup instructions.")
-        sys.exit(1)
-    print("   ✅ Database connected\n")
-
-    # ── Step 2: Ingest OpenAQ ────────────────────────────────────
-    print("Step 2 / 6 — Ingesting OpenAQ air quality data…")
-    from ingestion.openaq_collector import OpenAQCollector
-    aq_collector = OpenAQCollector(extraction_date=extraction_date)
-    aq_summary = aq_collector.collect()
-    total_aq = sum(aq_summary.values())
-    for city, count in aq_summary.items():
-        status = "✅" if count > 0 else "⚠️ "
-        print(f"   {status} {city}: {count} records")
-    print(f"   Total: {total_aq} air quality records\n")
-
-    # ── Step 3: Ingest Open-Meteo ────────────────────────────────
-    print("Step 3 / 6 — Ingesting Open-Meteo weather data…")
-    from ingestion.openmeteo_collector import OpenMeteoCollector
-    weather_collector = OpenMeteoCollector(extraction_date=extraction_date)
-    weather_summary = weather_collector.collect()
-    total_weather = sum(weather_summary.values())
-    for city, count in weather_summary.items():
-        status = "✅" if count > 0 else "⚠️ "
-        print(f"   {status} {city}: {count} hourly records")
-    print(f"   Total: {total_weather} weather records\n")
-
-    if total_aq == 0 and total_weather == 0:
-        print("❌ No data collected from either source. Check your internet connection.")
-        sys.exit(1)
-    if total_aq == 0:
-        print("   ⚠️  OpenAQ returned 0 records (API key may be missing/invalid).")
-        print("      Add OPENAQ_API_KEY to .env and re-run for full AQ data.\n")
-    if total_weather == 0:
-        print("   ⚠️  Open-Meteo returned 0 records.\n")
-
+def normalize_validate_load(extraction_date, aq_collector, weather_collector):
+    """Steps 4-5: raw landing zone -> normalize -> validate -> cleaned tables. Returns (aq_result, weather_result)."""
     # ── Step 4: Normalize ────────────────────────────────────────
     print("Step 4 / 6 — Normalizing data…")
     from etl.normalize import normalize_measurements, normalize_weather
@@ -159,6 +111,60 @@ def run(extraction_date: date) -> None:
         print("   ✅ Weather data loaded to cleaned.weather")
 
     print()
+    return aq_result, weather_result
+
+
+def run(extraction_date: date) -> None:
+    print(f"\n{'='*60}")
+    print(f"  AQI Pipeline — {extraction_date}")
+    print(f"{'='*60}\n")
+
+    # ── Step 0: Load env ─────────────────────────────────────────
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    # ── Step 1: Test DB connection ───────────────────────────────
+    print("Step 1 / 6 — Testing database connection…")
+    from db.db_utils import test_connection
+    if not test_connection():
+        print("\n❌ ERROR: Cannot connect to PostgreSQL!")
+        print("   Make sure PostgreSQL is running and .env is configured correctly.")
+        print("   See README.md → Step 2 for setup instructions.")
+        sys.exit(1)
+    print("   ✅ Database connected\n")
+
+    # ── Step 2: Ingest OpenAQ ────────────────────────────────────
+    print("Step 2 / 6 — Ingesting OpenAQ air quality data…")
+    from ingestion.openaq_collector import OpenAQCollector
+    aq_collector = OpenAQCollector(extraction_date=extraction_date)
+    aq_summary = aq_collector.collect()
+    total_aq = sum(aq_summary.values())
+    for city, count in aq_summary.items():
+        status = "✅" if count > 0 else "⚠️ "
+        print(f"   {status} {city}: {count} records")
+    print(f"   Total: {total_aq} air quality records\n")
+
+    # ── Step 3: Ingest Open-Meteo ────────────────────────────────
+    print("Step 3 / 6 — Ingesting Open-Meteo weather data…")
+    from ingestion.openmeteo_collector import OpenMeteoCollector
+    weather_collector = OpenMeteoCollector(extraction_date=extraction_date)
+    weather_summary = weather_collector.collect()
+    total_weather = sum(weather_summary.values())
+    for city, count in weather_summary.items():
+        status = "✅" if count > 0 else "⚠️ "
+        print(f"   {status} {city}: {count} hourly records")
+    print(f"   Total: {total_weather} weather records\n")
+
+    if total_aq == 0 and total_weather == 0:
+        print("❌ No data collected from either source. Check your internet connection.")
+        sys.exit(1)
+    if total_aq == 0:
+        print("   ⚠️  OpenAQ returned 0 records (API key may be missing/invalid).")
+        print("      Add OPENAQ_API_KEY to .env and re-run for full AQ data.\n")
+    if total_weather == 0:
+        print("   ⚠️  Open-Meteo returned 0 records.\n")
+
+    aq_result, weather_result = normalize_validate_load(extraction_date, aq_collector, weather_collector)
 
     # ── Step 6: Build gold layer ─────────────────────────────────
     print("Step 6 / 6 — Building analytical gold layer…")

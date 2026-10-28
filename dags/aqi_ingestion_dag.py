@@ -52,6 +52,15 @@ def check_db_connection(**context) -> None:
     logger.info("Database connection verified")
 
 
+def fill_gaps(**context) -> dict:
+    """Self-heal after downtime: load any days missing between the last loaded day and yesterday."""
+    from run_backfill import fill_gaps as _fill
+
+    result = _fill()
+    logger.info("Gap fill result: %s", result)
+    return result
+
+
 def ingest_openaq(**context) -> dict:
     """
     Collect OpenAQ measurements for the logical date (yesterday).
@@ -140,6 +149,12 @@ This DAG triggers `aqi_etl` DAG via external trigger or schedule dependency.
         doc_md="Verifies PostgreSQL is reachable before ingestion begins.",
     )
 
+    task_fill_gaps = PythonOperator(
+        task_id="fill_gaps",
+        python_callable=fill_gaps,
+        doc_md="Loads days missing since the last run (catchup=False means downtime would otherwise leave permanent gaps).",
+    )
+
     task_ingest_openaq = PythonOperator(
         task_id="ingest_openaq",
         python_callable=ingest_openaq,
@@ -160,4 +175,4 @@ This DAG triggers `aqi_etl` DAG via external trigger or schedule dependency.
 
     # ── Task dependencies ─────────────────────────────────────────────────────
     # DB check → parallel ingestion → summary log
-    task_check_db >> [task_ingest_openaq, task_ingest_openmeteo] >> task_log_summary
+    task_check_db >> task_fill_gaps >> [task_ingest_openaq, task_ingest_openmeteo] >> task_log_summary

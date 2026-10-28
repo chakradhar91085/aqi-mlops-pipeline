@@ -28,7 +28,7 @@ Open-Meteo  ──┘
                └── gold.*         (aggregated, AQI-calculated)
                           │
                           ▼
-               Streamlit Dashboard (http://localhost:8501)
+               Streamlit Dashboard (http://localhost:8511)
                ├── 📈 AQI Trend
                ├── 🧪 Pollutant Contribution
                ├── 🏙️ City Comparison
@@ -122,8 +122,8 @@ docker-compose up --build -d
 This starts:
 | Service | URL |
 |---|---|
-| **Airflow Webserver** | http://localhost:8080 (admin/admin) |
-| **Streamlit Dashboard** | http://localhost:8501 |
+| **Airflow Webserver** | http://localhost:8081 (admin/admin) |
+| **Streamlit Dashboard** | http://localhost:8511 |
 | **PostgreSQL** | localhost:5432 |
 
 Wait ~2 minutes for Airflow to initialize.
@@ -131,7 +131,7 @@ Wait ~2 minutes for Airflow to initialize.
 ### 3. Run the Pipeline
 
 **Option A — Via Airflow UI:**
-1. Open http://localhost:8080
+1. Open http://localhost:8081
 2. Enable the `aqi_ingestion` DAG → click **▶ Trigger**
 3. Wait for it to complete, then enable and trigger `aqi_etl`
 
@@ -150,7 +150,7 @@ python -m ingestion.openmeteo_collector
 
 ### 4. View the Dashboard
 
-Open **http://localhost:8501** in your browser.
+Open **http://localhost:8511** in your browser.
 
 ---
 
@@ -225,6 +225,18 @@ Every pipeline run writes to `data/logs/ingestion_log.csv`:
 
 ---
 
+## 🩹 Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Dashboard shows **"Connection error … invalid wire type"** or a page hangs, usually on pages with tables | Another Streamlit app is listening on host port 8501, so the browser mixes two servers of different versions | The dashboard is published on **8511** for this reason. Check with `Get-NetTCPConnection -LocalPort 8501 -State Listen` and keep the dashboard on its own port |
+| Home page warns **"Latest data is N days old"**, `aqi_ingestion` fails at `fill_gaps` or `ingest_openaq` | OpenAQ rejected the API key (HTTP 401) — keys can be revoked or expire | Create a new key at https://explore.openaq.org, set `OPENAQ_API_KEY` in `.env`, then `docker compose up -d --force-recreate airflow-webserver airflow-scheduler`. `fill_gaps` then back-fills every missed day automatically |
+| A dashboard edit does not show up | Streamlit caches page scripts and the file watcher does not see Windows bind-mount changes (the polling watcher breaks the app here) | `docker restart aqi_streamlit` |
+| `localhost:8080` (Airflow) not responding | Container left in `Created` state after Docker Desktop restarted | `docker start aqi_airflow_webserver` |
+| After a reboot nothing runs | Docker Desktop is not started | Start Docker Desktop, then `docker compose up -d postgres mlflow api streamlit airflow-webserver airflow-scheduler` (leave out the one-shot `pipeline` service) |
+
+---
+
 ## 🔧 Environment Variables
 
 See `.env.example` for all variables. Key ones:
@@ -254,13 +266,52 @@ See `.env.example` for all variables. Key ones:
 
 ---
 
-## 📚 Part 2 (Coming Soon)
+## 🤖 Part 2 — MLOps Extension
 
-Part 2 will extend this pipeline with:
-- AQI forecasting / classification models
-- MLflow experiment tracking
-- FastAPI + Docker model serving
-- Feature drift and data quality monitoring
+Predicts **next-day AQI per city** (plus the AQI category) from the gold tables, tracks every
+experiment in MLflow, serves the champion model through FastAPI in Docker, and monitors it daily.
+
+| Service | URL |
+|---|---|
+| **MLflow** (experiments + model registry) | http://localhost:5000 |
+| **Prediction API** (Swagger UI at `/docs`) | http://localhost:8000 |
+| Dashboard pages `AQI Forecast`, `Model Monitoring` | http://localhost:8511 |
+
+```
+ml/features.py     lag / rolling / pollutant / weather / calendar features (shared by train, API, monitoring)
+ml/train.py        baselines + 3 regressors + 3 classifiers -> MLflow -> registry -> @champion promotion gate
+ml/monitoring.py   PSI/KS drift, missing data, live forecast error, API latency/errors, retrain decision
+api/main.py        FastAPI: GET /predict?city=, GET /health, POST /reload
+dags/aqi_ml_monitoring_dag.py   daily: predict -> backfill actuals -> metrics -> retrain check
+dags/aqi_ml_training_dag.py     weekly / triggered: train -> promote -> reload API
+db/ml_schema.sql   schema `ml`: predictions, api_requests, monitoring_metrics
+```
+
+### Run it
+
+```bash
+docker compose up -d --build              # postgres, airflow, streamlit, mlflow, api
+docker exec -i aqi_postgres psql -U aqi_user -d aqi_db < db/ml_schema.sql   # only for a pre-existing DB volume
+
+# 1. History: the model needs months of data (~1 year recommended, covers a full winter)
+docker compose run --rm pipeline python run_backfill.py 2025-10-01 2026-10-02
+
+# 2. Train (logs every run to MLflow, registers the best regressor, promotes it to @champion)
+docker compose exec airflow-scheduler python -m ml.train --promote
+docker compose restart api                # or: curl -X POST localhost:8000/reload
+
+# 3. Use it
+curl "localhost:8000/predict?city=Delhi"
+```
+
+Then enable the `aqi_ml_monitoring` DAG in Airflow (daily). It stores live forecasts, scores them
+once the actual AQI arrives, computes drift/error metrics and triggers `aqi_ml_training` when a
+retraining criterion fires. See [docs/model_lifecycle.md](docs/model_lifecycle.md) for the promotion gate,
+monitoring thresholds, retraining criteria and rollback procedure.
+
+```bash
+pytest tests/ -v          # feature leakage, PSI, retrain rules, API (API tests need fastapi: run in the api image)
+```
 
 ---
 

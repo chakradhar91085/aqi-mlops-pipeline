@@ -231,3 +231,37 @@ class TestOpenMeteoCollector:
         assert len(records) == 3
         assert all("temperature_2m" in r for r in records)
         assert all(r["city"] == "Delhi" for r in records)
+
+
+def test_select_stations_prefers_long_history_active_stations(tmp_path):
+    from datetime import date, timedelta
+
+    from ingestion.openaq_collector import OpenAQCollector
+
+    today = date.today()
+    recent = (today - timedelta(days=1)).isoformat()
+    sensors = [{"parameter": {"name": p}} for p in ("pm25", "pm10", "no2", "o3", "co", "so2")]
+
+    def loc(i, first, last=recent, n=6):
+        return {"id": i, "datetimeFirst": {"utc": f"{first}T00:00:00Z"}, "datetimeLast": {"utc": f"{last}T00:00:00Z"},
+                "sensors": sensors[:n]}
+
+    locs = [
+        loc(1, "2026-08-01"),                          # new low-cost sensor
+        loc(2, "2016-02-05"),                          # official, long history
+        loc(3, "2018-03-09", last="2022-10-31"),       # dead station
+        loc(4, "2018-03-09", n=2),                     # too few target sensors
+        loc(5, "2017-09-15"),
+    ]
+    picked = [l["id"] for l in OpenAQCollector(raw_dir=tmp_path).select_stations(locs)]
+    assert picked == [2, 5, 1]
+
+
+def test_rejected_api_key_fails_loudly_instead_of_collecting_zero_rows(tmp_path):
+    collector = OpenAQCollector(extraction_date=date(2026, 9, 1), raw_dir=tmp_path / "openaq", api_key="bad")
+    resp = MagicMock(status_code=401)
+    with patch.object(collector.session, "get", return_value=resp):
+        with pytest.raises(PermissionError, match="API key"):
+            collector.get_locations("Delhi")
+        with pytest.raises(PermissionError):
+            collector.collect(cities=["Delhi"])

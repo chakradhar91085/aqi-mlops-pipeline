@@ -5,14 +5,19 @@ version: "3.9"
 # Usage:
 #   cp .env.example .env          # fill in your values
 #   docker-compose up --build -d
-#   http://localhost:8080          # Airflow UI  (admin / admin)
-#   http://localhost:8501          # Streamlit dashboard
+#   http://localhost:8081          # Airflow UI  (admin / admin)
+#   http://localhost:8511          # Streamlit dashboard (8511, not 8501: 8501 is commonly taken by other local Streamlit apps)
 # ──────────────────────────────────────────────────────────────────────────────
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.9.2
+  image: aqi-airflow-ml:latest
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile
   env_file: .env
   environment:
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    API_URL: http://api:8000
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
@@ -29,8 +34,10 @@ x-airflow-common: &airflow-common
     - ./ingestion:/opt/airflow/ingestion
     - ./etl:/opt/airflow/etl
     - ./db:/opt/airflow/db
+    - ./ml:/opt/airflow/ml
     - ./data:/opt/airflow/data
     - ./run_pipeline.py:/opt/airflow/run_pipeline.py
+    - ./run_backfill.py:/opt/airflow/run_backfill.py
     - airflow_logs:/opt/airflow/logs
     - airflow_plugins:/opt/airflow/plugins
   depends_on:
@@ -52,6 +59,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/ml_schema.sql:/docker-entrypoint-initdb.d/02_ml_schema.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -86,7 +94,7 @@ services:
     container_name: aqi_airflow_webserver
     command: webserver
     ports:
-      - "8080:8080"
+      - "8081:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -116,8 +124,9 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
+      API_URL: http://api:8000
     ports:
-      - "8501:8501"
+      - "8511:8501"
     command: streamlit run dashboard/Home.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false
     volumes:
       - ./dashboard:/app/dashboard
@@ -125,6 +134,43 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - aqi_net
+    restart: unless-stopped
+
+  # ── MLflow tracking server + model registry (Part 2) ────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.16.2
+    container_name: aqi_mlflow
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts --serve-artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    networks:
+      - aqi_net
+    restart: unless-stopped
+
+  # ── FastAPI prediction service (Part 2) ─────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: aqi_api
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
     networks:
       - aqi_net
     restart: unless-stopped
@@ -143,6 +189,7 @@ volumes:
   postgres_data:
   airflow_logs:
   airflow_plugins:
+  mlflow_data:
 
 networks:
   aqi_net:

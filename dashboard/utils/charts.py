@@ -234,7 +234,8 @@ def hourly_heatmap(df: pd.DataFrame) -> go.Figure:
     ))
     _apply_base(fig, "Average AQI by Hour of Day and Day of Week")
     fig.update_xaxes(title="Hour (IST)")
-    fig.update_yaxes(title="Day")
+    fig.update_yaxes(title="Day", categoryorder="array",
+                     categoryarray=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], autorange="reversed")
     return fig
 
 
@@ -320,3 +321,64 @@ def weather_correlation_matrix(df: pd.DataFrame) -> go.Figure:
     ))
     _apply_base(fig, "Weather–AQI Correlation Matrix")
     return fig
+
+
+# ── Part 2: forecast + monitoring charts ──────────────────────────────────────
+
+def forecast_vs_actual(df: pd.DataFrame) -> go.Figure:
+    """Predicted vs actual next-day AQI; backtest and live predictions drawn separately."""
+    fig = go.Figure()
+    known = df.dropna(subset=["actual_aqi"])
+    fig.add_trace(go.Scatter(
+        x=known["forecast_date"], y=known["actual_aqi"], mode="lines", name="Actual",
+        line=dict(color="#e6edf3", width=2),
+        hovertemplate="Actual: %{y:.0f}<br>%{x}<extra></extra>",
+    ))
+    styles = {"backtest": ("#58a6ff", "Predicted (backtest)"), "live": ("#f78166", "Predicted (live)")}
+    for source, (color, label) in styles.items():
+        d = df[df["source"] == source]
+        if d.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=d["forecast_date"], y=d["predicted_aqi"],
+            mode="lines+markers" if source == "live" else "lines",
+            name=label, line=dict(color=color, width=2, dash="dot" if source == "backtest" else "solid"),
+            hovertemplate=label + ": %{y:.0f}<br>%{x}<extra></extra>",
+        ))
+    fig.update_yaxes(title="AQI")
+    return _apply_base(fig, "Next-Day AQI — Predicted vs Actual")
+
+
+def metric_line(df: pd.DataFrame, metric: str, title: str, y_title: str) -> go.Figure:
+    """One monitoring metric over time (scope 'all'), with its alert threshold if present."""
+    d = df[(df["metric"] == metric) & (df["scope"] == "all")]
+    fig = go.Figure()
+    if not d.empty:
+        fig.add_trace(go.Scatter(x=d["run_date"], y=d["value"], mode="lines+markers", name=metric,
+                                 line=dict(color="#58a6ff", width=2)))
+        breach = d[d["breached"] == True]  # noqa: E712
+        if not breach.empty:
+            fig.add_trace(go.Scatter(x=breach["run_date"], y=breach["value"], mode="markers", name="Breached",
+                                     marker=dict(color="#ff4b4b", size=11, symbol="x")))
+        thr = d["threshold"].dropna()
+        if not thr.empty:
+            fig.add_hline(y=float(thr.iloc[-1]), line_dash="dash", line_color="#f78166",
+                          annotation_text="threshold", annotation_position="top left")
+    fig.update_yaxes(title=y_title)
+    fig.update_xaxes(type="date", tickformat="%b %d", dtick=86400000 * max(1, len(d) // 8))
+    return _apply_base(fig, title)
+
+
+def psi_heatmap(df: pd.DataFrame) -> go.Figure:
+    """PSI per feature over time; >0.25 is significant drift."""
+    d = df[df["metric"] == "psi"]
+    fig = go.Figure()
+    if not d.empty:
+        pivot = d.pivot_table(index="scope", columns="run_date", values="value")
+        fig.add_trace(go.Heatmap(
+            z=pivot.values, x=[str(c) for c in pivot.columns], y=pivot.index.tolist(),
+            colorscale=[[0, "#2a9d8f"], [0.2, "#e9c46a"], [0.5, "#e76f51"], [1, "#9d0208"]],
+            zmin=0, zmax=0.5, colorbar=dict(title="PSI"),
+            hovertemplate="<b>%{y}</b><br>%{x}<br>PSI: %{z:.3f}<extra></extra>",
+        ))
+    return _apply_base(fig, "Feature Drift (PSI vs training window)")
