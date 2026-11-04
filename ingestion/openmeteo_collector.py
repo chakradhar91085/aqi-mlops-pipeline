@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-RAW_DATA_DIR = Path(os.getenv("RAW_WEATHER_DIR", "data/raw/openmeteo"))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_raw_env = os.getenv("RAW_WEATHER_DIR", "data/raw/openmeteo")
+RAW_DATA_DIR = Path(_raw_env) if Path(_raw_env).is_absolute() else (PROJECT_ROOT / _raw_env)
 
 WEATHER_VARIABLES = [
     "temperature_2m",

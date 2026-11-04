@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "AQI Postgres (Docker)",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "aqi_db",
+      "Username": "aqi_user",
+      "SSLMode": "prefer",
+      "PassFile": "/tmp/pgpass"
+    }
+  }
+}

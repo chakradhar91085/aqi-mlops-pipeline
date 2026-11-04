@@ -20,13 +20,19 @@ import argparse
 import logging
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s — %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("run_backfill")
@@ -137,10 +143,22 @@ def etl_days(days: list[date]) -> None:
 
 
 def selected_location_ids() -> set[int]:
-    from ingestion.openaq_collector import CITY_BBOXES, OpenAQCollector
+    from ingestion.openaq_collector import CITY_BBOXES, MAX_LOCATIONS_PER_CITY, OpenAQCollector
 
-    c = OpenAQCollector()
-    return {l["id"] for city in CITY_BBOXES for l in c.select_stations(c.get_locations(city))}
+    try:
+        c = OpenAQCollector()
+        return {l["id"] for city in CITY_BBOXES for l in c.select_stations(c.get_locations(city))}
+    except Exception as exc:
+        # Longest history per city, as select_stations prefers. Taking every ID on disk would
+        # pull in the short-lived recency-picked stations and shift the city averages.
+        logger.warning("Could not query OpenAQ API (%s); picking stations from raw files on disk", exc)
+        raw_base = Path(__file__).resolve().parent / "data" / "raw" / "openaq"
+        days_on_disk: dict[str, Counter] = defaultdict(Counter)
+        for f in raw_base.glob("*/*/location_*.json"):
+            days_on_disk[f.parent.name][int(f.stem.split("_")[1])] += 1
+        ids = {i for c in days_on_disk.values() for i, _ in c.most_common(MAX_LOCATIONS_PER_CITY)}
+        logger.info("Picked %d stations from disk", len(ids))
+        return ids
 
 
 def build_gold_windows(start: date, end: date, window_days: int = 31) -> None:

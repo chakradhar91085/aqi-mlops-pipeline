@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 POLLUTANTS = ["pm25", "pm10", "no2", "o3", "co", "so2"]
+IST = "Asia/Kolkata"
 
 
 def _pivot_pollutants(df: pd.DataFrame, group_cols: list[str], time_col: str) -> pd.DataFrame:
@@ -85,8 +86,10 @@ def build_hourly_station_aqi(df_cleaned: pd.DataFrame) -> pd.DataFrame:
 
     # Floor timestamps to the hour
     df = df_cleaned.copy()
-    df["hour_utc"] = df["measured_at_utc"].dt.floor("h")
-    df["hour_ist"] = df["measured_at_ist"].dt.floor("h")
+    # Normalize first: rows read back from Postgres carry the session's offset, and flooring
+    # in +05:30 would land on :30 UTC, creating different hour_utc keys than in-memory rows.
+    df["hour_utc"] = pd.to_datetime(df["measured_at_utc"], utc=True).dt.floor("h")
+    df["hour_ist"] = pd.to_datetime(df["measured_at_ist"], utc=True).dt.tz_convert(IST).dt.floor("h")
 
     group_cols = ["location_id", "station_name", "city"]
     wide = _pivot_pollutants(df, group_cols, "hour_utc")
@@ -231,7 +234,7 @@ def build_weather_aqi_daily(
         return pd.DataFrame()
 
     df_w = df_weather_cleaned.copy()
-    df_w["date_ist"] = pd.to_datetime(df_w["measured_at_ist"]).dt.date
+    df_w["date_ist"] = pd.to_datetime(df_w["measured_at_ist"], utc=True).dt.tz_convert(IST).dt.date
 
     weather_daily = (
         df_w.groupby(["city", "date_ist"])
@@ -309,6 +312,7 @@ def build_gold_layer(
             schema="gold",
             conflict_columns=["location_id", "hour_utc"],
             update_columns=[
+                "hour_ist",
                 "pm25_avg", "pm10_avg", "no2_avg", "o3_avg", "co_avg", "so2_avg",
                 "aqi", "aqi_category", "dominant_pollutant",
             ],

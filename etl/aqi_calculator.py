@@ -158,10 +158,6 @@ def sub_index(parameter: str, concentration: float | None) -> float | None:
     if breakpoints is None:
         return None
 
-    for bp in breakpoints:
-        if bp.c_lo <= concentration <= bp.c_hi:
-            return _linear_interpolation(concentration, bp)
-
     # Above the highest breakpoint → cap at 500
     if concentration > breakpoints[-1].c_hi:
         logger.debug(
@@ -170,7 +166,10 @@ def sub_index(parameter: str, concentration: float | None) -> float | None:
         )
         return 500.0
 
-    return None
+    # Bands leave gaps (PM10 54 → 55, PM2.5 12.0 → 12.1). EPA truncates to the table's precision
+    # first, which puts a gap value at the top of the lower band; dropping it would understate AQI.
+    bp = next(b for b in reversed(breakpoints) if b.c_lo <= concentration)
+    return _linear_interpolation(min(concentration, bp.c_hi), bp)
 
 
 @dataclass

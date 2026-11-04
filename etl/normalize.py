@@ -19,9 +19,6 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# IST offset: UTC+05:30
-IST_OFFSET = pd.Timedelta("5h30min")
-
 # ── Pollutant name mapping (OpenAQ API name → standard name) ─────────────────
 POLLUTANT_NAME_MAP: dict[str, str] = {
     "pm25":  "pm25",
@@ -114,7 +111,7 @@ def _utc_to_ist(ts_utc: pd.Timestamp | None) -> pd.Timestamp | None:
     """Convert UTC timestamp to IST (UTC+5:30)."""
     if ts_utc is None or pd.isna(ts_utc):
         return None
-    return ts_utc + IST_OFFSET
+    return ts_utc.tz_convert("Asia/Kolkata")
 
 
 # ── Main normalization functions ──────────────────────────────────────────────

@@ -24,7 +24,8 @@ def _get_engine():
     port = os.getenv("POSTGRES_PORT", "5432")
     db = os.getenv("POSTGRES_DB", "aqi_db")
     dsn = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"
-    return create_engine(dsn, pool_pre_ping=True)
+    # date(hour_ist) / EXTRACT(HOUR FROM hour_ist) must mean IST whatever the server's default is.
+    return create_engine(dsn, pool_pre_ping=True, connect_args={"options": "-c timezone=Asia/Kolkata"})
 
 
 def _read(sql: str, params: dict | None = None) -> pd.DataFrame:

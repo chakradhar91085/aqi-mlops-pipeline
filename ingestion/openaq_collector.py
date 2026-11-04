@@ -41,7 +41,9 @@ logger = logging.getLogger(__name__)
 
 OPENAQ_BASE_URL = "https://api.openaq.org/v3"
 TARGET_POLLUTANTS = ["pm25", "pm10", "no2", "o3", "co", "so2"]
-RAW_DATA_DIR = Path(os.getenv("RAW_DATA_DIR", "data/raw/openaq"))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_raw_env = os.getenv("RAW_DATA_DIR", "data/raw/openaq")
+RAW_DATA_DIR = Path(_raw_env) if Path(_raw_env).is_absolute() else (PROJECT_ROOT / _raw_env)
 
 # City → approximate bounding box (lat_min, lon_min, lat_max, lon_max)
 CITY_BBOXES: dict[str, tuple[float, float, float, float]] = {

@@ -124,7 +124,10 @@ This starts:
 |---|---|
 | **Airflow Webserver** | http://localhost:8081 (admin/admin) |
 | **Streamlit Dashboard** | http://localhost:8511 |
-| **PostgreSQL** | localhost:5432 |
+| **MLflow** | http://localhost:5000 |
+| **Forecast API** | http://localhost:8000/docs |
+| **PostgreSQL** | localhost:5433 (host port, so it can coexist with a native Postgres on 5432) |
+| **pgAdmin** | http://localhost:5050 (no login; the database is already registered) |
 
 Wait ~2 minutes for Airflow to initialize.
 
@@ -135,18 +138,15 @@ Wait ~2 minutes for Airflow to initialize.
 2. Enable the `aqi_ingestion` DAG → click **▶ Trigger**
 3. Wait for it to complete, then enable and trigger `aqi_etl`
 
-**Option B — Manual Python run (local development):**
+**Option B — Run from the host against the Docker database:**
 ```bash
-# Install dependencies
+# Python 3.11 or 3.12: the pinned packages have no wheels for 3.14
 pip install -r requirements.txt
 
-# Copy env
-cp .env.example .env
-
-# Run ingestion for today
-python -m ingestion.openaq_collector
-python -m ingestion.openmeteo_collector
+python run_pipeline.py              # today
+python run_pipeline.py 2026-09-06   # a specific date
 ```
+With a rejected OpenAQ key it still loads weather, then exits 1 and reports the run as incomplete.
 
 ### 4. View the Dashboard
 
@@ -183,6 +183,9 @@ Connect to PostgreSQL:
 ```bash
 docker exec -it aqi_postgres psql -U aqi_user -d aqi_db
 ```
+Or open **http://localhost:5050** (pgAdmin, pre-connected: Servers → AQI Postgres → Databases → aqi_db → Schemas), or point your own client at `localhost:5433`. All timestamps are `TIMESTAMPTZ`, so `measured_at_utc` and
+`measured_at_ist` hold the same instant. Run `SET timezone = 'Asia/Kolkata';` first in psql to see IST
+wall-clock times; the pipeline and dashboard set this on every connection.
 
 ---
 
@@ -233,7 +236,9 @@ Every pipeline run writes to `data/logs/ingestion_log.csv`:
 | Home page warns **"Latest data is N days old"**, `aqi_ingestion` fails at `fill_gaps` or `ingest_openaq` | OpenAQ rejected the API key (HTTP 401) — keys can be revoked or expire | Create a new key at https://explore.openaq.org, set `OPENAQ_API_KEY` in `.env`, then `docker compose up -d --force-recreate airflow-webserver airflow-scheduler`. `fill_gaps` then back-fills every missed day automatically |
 | A dashboard edit does not show up | Streamlit caches page scripts and the file watcher does not see Windows bind-mount changes (the polling watcher breaks the app here) | `docker restart aqi_streamlit` |
 | `localhost:8080` (Airflow) not responding | Container left in `Created` state after Docker Desktop restarted | `docker start aqi_airflow_webserver` |
-| After a reboot nothing runs | Docker Desktop is not started | Start Docker Desktop, then `docker compose up -d postgres mlflow api streamlit airflow-webserver airflow-scheduler` (leave out the one-shot `pipeline` service) |
+| After a reboot nothing runs | Docker Desktop is not started | Start Docker Desktop; every service restarts by itself. If not, `docker compose up -d postgres mlflow api streamlit airflow-webserver airflow-scheduler` (leave out the one-shot `pipeline` service) |
+| Data looks far smaller than expected (e.g. 15 days) | You are connected to a native Postgres on 5432, not the project's database | The project's database is the Docker one, on **5433** |
+| `pip install -r requirements.txt` fails building `pyarrow` | Python 3.14: the pins have no wheels for it | Use Python 3.11 or 3.12 |
 
 ---
 

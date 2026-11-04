@@ -25,6 +25,12 @@ import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
+
 # Make project root importable
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -137,7 +143,19 @@ def run(extraction_date: date) -> None:
     print("Step 2 / 6 — Ingesting OpenAQ air quality data…")
     from ingestion.openaq_collector import OpenAQCollector
     aq_collector = OpenAQCollector(extraction_date=extraction_date)
-    aq_summary = aq_collector.collect()
+    try:
+        aq_summary = aq_collector.collect()
+    except Exception as exc:
+        cached = aq_collector.load_raw_files(extraction_date)
+        if cached:
+            logger.info("Using %d cached raw OpenAQ records from disk for %s (%s)", len(cached), extraction_date, exc)
+            aq_summary = {"cached": len(cached)}
+        elif isinstance(exc, PermissionError):
+            # Weather and the ETL don't need the key. Keep going; exit non-zero at the end.
+            print(f"   ❌ {exc}\n")
+            aq_summary = {}
+        else:
+            raise
     total_aq = sum(aq_summary.values())
     for city, count in aq_summary.items():
         status = "✅" if count > 0 else "⚠️ "
@@ -148,7 +166,15 @@ def run(extraction_date: date) -> None:
     print("Step 3 / 6 — Ingesting Open-Meteo weather data…")
     from ingestion.openmeteo_collector import OpenMeteoCollector
     weather_collector = OpenMeteoCollector(extraction_date=extraction_date)
-    weather_summary = weather_collector.collect()
+    try:
+        weather_summary = weather_collector.collect()
+    except Exception as exc:
+        cached = weather_collector.load_raw_files(extraction_date)
+        if cached:
+            logger.info("Using %d cached raw weather records from disk for %s (%s)", len(cached), extraction_date, exc)
+            weather_summary = {"cached": len(cached)}
+        else:
+            raise
     total_weather = sum(weather_summary.values())
     for city, count in weather_summary.items():
         status = "✅" if count > 0 else "⚠️ "
@@ -168,19 +194,25 @@ def run(extraction_date: date) -> None:
 
     # ── Step 6: Build gold layer ─────────────────────────────────
     print("Step 6 / 6 — Building analytical gold layer…")
-    from etl.gold_layer import build_gold_layer
+    # Rebuild from cleaned.*, not this run's rows: a UTC day spans two IST days, so this run
+    # alone holds only part of each, and upserting that would overwrite complete daily AQI.
+    from run_backfill import build_gold_windows
 
-    gold_results = build_gold_layer(aq_result.valid, weather_result.valid)
-    for table, df in gold_results.items():
-        count = len(df) if hasattr(df, '__len__') else '?'
-        print(f"   ✅ gold.{table}: {count} rows")
+    build_gold_windows(extraction_date, extraction_date + timedelta(days=1))
+    print("   ✅ gold tables rebuilt")
+
+    if total_aq == 0:
+        print(f"\n{'='*60}")
+        print("  ⚠️  Pipeline incomplete: weather loaded, no air quality data.")
+        print(f"{'='*60}\n")
+        sys.exit(1)
 
     print(f"\n{'='*60}")
     print("  ✅ Pipeline complete!")
     print(f"{'='*60}")
     print("\nNext step: launch the dashboard")
-    print("    streamlit run dashboard/Home.py")
-    print("    Then open: http://localhost:8501\n")
+    print("    Docker: http://localhost:8511")
+    print("    Local:  streamlit run dashboard/Home.py, then http://localhost:8501\n")
 
 
 if __name__ == "__main__":

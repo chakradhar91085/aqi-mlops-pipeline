@@ -116,11 +116,12 @@ class TestNormalizeMeasurements:
     def test_timestamp_conversion(self):
         records = [self._make_raw_record()]
         df = normalize_measurements(records)
-        # IST = UTC + 5:30
         utc_ts = df.iloc[0]["measured_at_utc"]
         ist_ts = df.iloc[0]["measured_at_ist"]
-        diff_hours = (ist_ts - utc_ts).total_seconds() / 3600
-        assert diff_hours == pytest.approx(5.5, abs=0.1)
+        # Same instant: stored in TIMESTAMPTZ, an added offset would become a real 5.5h error.
+        assert ist_ts == utc_ts
+        # IST wall clock = UTC + 5:30
+        assert ist_ts.tz_localize(None) - utc_ts.tz_localize(None) == pd.Timedelta("5h30min")
 
     def test_empty_input(self):
         df = normalize_measurements([])

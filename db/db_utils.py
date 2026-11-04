@@ -52,6 +52,8 @@ def get_engine() -> Engine:
             max_overflow=10,
             pool_pre_ping=True,
             echo=False,
+            # date(measured_at_ist) etc. must mean IST whatever the server's default timezone is.
+            connect_args={"options": "-c timezone=Asia/Kolkata"},
         )
         logger.info("Database engine created: %s", dsn.split("@")[-1])
     return _engine
